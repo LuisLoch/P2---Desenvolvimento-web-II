@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Jogo da Velha</title>
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-gap: 10px;
+        margin: 20px auto;
+        width: 300px;
+      }
+
+      .cell {
+        width: 100px;
+        height: 100px;
+        border: 1px solid #000;
+        font-size: 40px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Jogo da Velha</h1>
+    <h2 id="playerMarkerText"></h2>
+    <h2 id="currentTurnText"></h2>
+
+    <div class="board">
+      <div class="cell"></div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+    </div>
+
+    <button id="restartButton">Recomeçar</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.1.2/socket.io.js"></script>
+    <script>
+      const cells = document.querySelectorAll(".cell"); //cada item da tabela de posições do jogo da velha
+      const restartButton = document.getElementById("restartButton"); //botão reiniciar
+      const playerMarkerText = document.getElementById("playerMarkerText"); //subtítulo que informa qual o marcador do jogador em questão (X ou O)
+      const currentTurnText = document.getElementById("currentTurnText"); //subtítulo que informa qual o marcador do jogador em questão (X ou O)
+
+      const socket = io();
+
+      let player = ''; //Marcador do cliente/jogador em questão
+      let currentTurn = 'X'; //Turno atual de jogadas, será alterado a cada jogada feita
+      let board = ['', '', '', '', '', '', '', '', '']; //Tabela de posições do jogo da velha em forma de array de Strings
+      let winConditions = [];
+
+      //Quando o socket em questão receber um 'playerAssignment'
+      socket.on('playerAssignment', (marker) => {
+        player = marker; //O player em questão recebe o marker que o servidor enviou (se for o primeiro jogador, recebe X, se for o segundo jogador, recebe O)
+        playerMarkerText.textContent = `Você é o jogador ${marker}`; //Atualiza o texto que informa qual jogador o cliente em questão é (X ou O)
+        currentTurnText.textContent = `Vez do jogador: ${currentTurn}`; //Atualiza o texto que informa de qual jogador é o turno atual (começa pelo jogador de marcador X)
+        winConditions = [
+          [0, 1, 2],
+          [3, 4, 5],
+          [6, 7, 8],
+          [0, 3, 6],
+          [1, 4, 7],
+          [2, 5, 8],
+          [0, 4, 8],
+          [2, 4, 6],
+        ]
+
+        //Todas as posições recebem a função de handleCellClick
+        cells.forEach((cell, index) => {
+          console.log(`A posição ${index} recebeu um eventListener`);
+          cell.addEventListener("click", () => {
+            handleCellClick(index);
+          });
+
+          if(player == 'X'){
+            cell.addEventListener("mouseover", () => {
+              cell.style.backgroundColor = "aquamarine";
+            });
+          } else if (player == 'O') {
+            cell.addEventListener("mouseover", () => {
+              cell.style.backgroundColor = "tomato";
+            });
+          }
+
+          cell.addEventListener("mouseout", () => {
+            cell.style.backgroundColor = "";
+          });
+        });
+      });
+
+      handleCellClick = (index) => {
+        if (currentTurn != player) {
+          alert(`Espere a sua vez para jogar!`);
+          return;
+        } else if (cells[index].textContent !== "") {
+          alert(`Apenas posições vazias podem ser marcadas`);
+        } else {
+          // Enviar o 'move' para o servidor com o index da cell e o marker do player para que o servidor marque na tabela dele
+          socket.emit("move", { index, player });
+        }
+      };
+
+      socket.on('updateBoard', (newBoard) => {
+        board = newBoard;
+        cells.forEach((cell, index) => {
+          cell.textContent = board[index];
+        })
+        console.log(`Jogador ${currentTurn} atualizou a tabela globalmente: ${board}`);
+        winConditions.forEach((winCondition) => {
+          if (board[winCondition[0]] === player && board[winCondition[1]] === player && board[winCondition[2]] === player) {
+            console.log(`Eu venci com as posições ${winCondition[0]}, ${winCondition[1]} e ${winCondition[2]}`)
+            socket.emit("iWin", player);
+          }
+        })
+      });
+
+      socket.on('nextTurn', (newTurn) => {
+        currentTurn = newTurn;
+        console.log(`Atualizou o turno globalmente: ${currentTurn}`);
+        currentTurnText.textContent = `Turno: ${currentTurn}.`;
+      })
+
+      socket.on('gameOver', (winner) => {
+        if (player === winner) {
+          alert("Você venceu!");
+        } else {
+          alert("Você perdeu!");
+        }
+      })
+
+      socket.on('startGame', () => {
+        setTimeout(function() {
+          alert("O jogo começou!");
+        }, 100);
+      });
+
+      socket.on('gameRestarted', () => {
+        alert("O jogo recomeçou!");
+      });
+
+      // Evento de clique no botão "Recomeçar"
+      restartButton.addEventListener("click", () => {
+        socket.emit("restart");
+      });
+
+      socket.on('gameFull', () => {
+        alert('O jogo já está em andamento. Tente novamente mais tarde.');
+      });
+    </script>
+  </body>
+</html>
